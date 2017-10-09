@@ -27,14 +27,16 @@ object FrontendBuild extends Build with MicroService {
     "com.typesafe.play" %% "play-test" % PlayVersion.current % scope,
     "org.scalamock" %% "scalamock-scalatest-support" % "3.5.0" % scope,
     "uk.gov.hmrc" %% "stub-data-generator" % "0.4.0" % scope,
+    "com.typesafe.akka" %% "akka-testkit" % "2.3.11" % scope,
+    "com.miguno.akka" % "akka-mock-scheduler_2.11" % "0.5.1" % scope,
+
     // below for selenium tests
     "info.cukes" % "cucumber-junit" % "1.2.4" % scope,
     "info.cukes" % "cucumber-picocontainer" % "1.2.4" % scope,
     "info.cukes" %% "cucumber-scala" % "1.2.4" % scope,
     "org.seleniumhq.selenium" % "selenium-java" % "2.53.1" % scope,
     "org.seleniumhq.selenium" % "selenium-firefox-driver" % "2.53.1" % scope,
-    "uk.gov.hmrc" %% "zap-automation" % "0.15.0" % scope,
-    "com.miguno.akka" % "akka-mock-scheduler_2.11" % "0.5.1" % scope
+    "uk.gov.hmrc" %% "zap-automation" % "0.15.0" % scope
   )
 
 }

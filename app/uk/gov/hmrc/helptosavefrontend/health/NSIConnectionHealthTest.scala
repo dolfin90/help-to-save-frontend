@@ -30,6 +30,7 @@ import uk.gov.hmrc.helptosavefrontend.metrics.Metrics.nanosToPrettyString
 import uk.gov.hmrc.helptosavefrontend.models.NSIUserInfo
 import uk.gov.hmrc.helptosavefrontend.models.NSIUserInfo.ContactDetails
 import uk.gov.hmrc.helptosavefrontend.util.Email
+import uk.gov.hmrc.http.HeaderCarrier
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
@@ -41,16 +42,18 @@ class NSIConnectionHealthTest {
 
 object NSIConnectionHealthTest {
 
-  private[health] class NSIConnectionHealthTestRunner(config: Config,
-                                                      nsiConnector: NSIConnector,
-                                                      scheduler: Scheduler,
-                                                      metrics: Metrics,
+  private[health] class NSIConnectionHealthTestRunner(config:         Config,
+                                                      nsiConnector:   NSIConnector,
+                                                      scheduler:      Scheduler,
+                                                      metrics:        Metrics,
                                                       pagerDutyAlert: () ⇒ Unit
-                                                     ) extends Actor with ActorLogging {
+  ) extends Actor with ActorLogging {
 
     import uk.gov.hmrc.helptosavefrontend.health.NSIConnectionHealthTest.NSIConnectionHealthTestRunner._
 
     implicit val ec: ExecutionContext = context.dispatcher
+
+    implicit val hc: HeaderCarrier = HeaderCarrier()
 
     val timeBetweenTests: FiniteDuration =
       config.get[FiniteDuration]("health.nsi-connection.poll-period").value.max(1.minute)
@@ -68,14 +71,13 @@ object NSIConnectionHealthTest {
 
     var performTestTask: Option[Cancellable] = None
 
-    override def receive: Receive = ok(0)
+    override def receive: Receive = ok(1)
 
-    def ok(count: Int): Receive = ready orElse {
-
+    def ok(count: Int): Receive = performTest orElse {
       case TestResult.Success(nanos) ⇒
         log.debug(s"Health check OK ${timeString(nanos)}")
-        val newCount = count + 1
-        if(newCount === numberOfTestsBetweenUpdates){
+        val newCount = (count + 1) % numberOfTestsBetweenUpdates
+        if (newCount === 0) {
           payload = Payload.next()
         }
         context become ok(newCount)
@@ -94,7 +96,7 @@ object NSIConnectionHealthTest {
 
     }
 
-    def failing(fails: Int): Receive = ready orElse {
+    def failing(fails: Int): Receive = performTest orElse {
       case TestResult.Success(nanos) ⇒
         log.info(s"Health check was failing but now OK ${timeString(nanos)}")
         becomeOK()
@@ -112,8 +114,8 @@ object NSIConnectionHealthTest {
 
     }
 
-    def failed(fails: Int): Receive = ready orElse {
-      case TestResult.Success(nanos)       ⇒
+    def failed(fails: Int): Receive = performTest orElse {
+      case TestResult.Success(nanos) ⇒
         log.info(s"Health check had failed but now OK ${timeString(nanos)}")
         becomeOK()
 
@@ -122,14 +124,14 @@ object NSIConnectionHealthTest {
         val newFails = fails + 1
         metrics.healthCheckFailuresHistogram.update(maximumConsecutiveFailures + newFails)
 
-        if(newFails % numberOfTestsBetweenAlerts === 0){
+        if (newFails % numberOfTestsBetweenAlerts === 0) {
           pagerDutyAlert()
         }
     }
 
     def becomeOK(): Unit = {
       metrics.healthCheckFailuresHistogram.update(0)
-      context become ok(0)
+      context become ok(1)
     }
 
     def becomeFailing(fails: Int): Unit = {
@@ -142,11 +144,11 @@ object NSIConnectionHealthTest {
       context become failed(fails)
     }
 
-    def ready: Receive = {
-      case PerformTest ⇒ performTest() pipeTo self
+    def performTest: Receive = {
+      case PerformTest ⇒ doTest() pipeTo self
     }
 
-    def performTest(): Future[TestResult] = {
+    def doTest(): Future[TestResult] = {
       val timer = metrics.healthCheckTimer.time()
 
       nsiConnector.test(payload.value).value.map[TestResult]{ result ⇒
@@ -174,10 +176,10 @@ object NSIConnectionHealthTest {
 
   private[health] object NSIConnectionHealthTestRunner {
 
-    def props(config: Config,
-              nsiConnector: NSIConnector,
-              scheduler: Scheduler,
-              metrics: Metrics,
+    def props(config:         Config,
+              nsiConnector:   NSIConnector,
+              scheduler:      Scheduler,
+              metrics:        Metrics,
               pagerDutyAlert: () ⇒ Unit): Props =
       Props(new NSIConnectionHealthTestRunner(config, nsiConnector, scheduler, metrics, pagerDutyAlert))
 
@@ -200,13 +202,13 @@ object NSIConnectionHealthTest {
 
       private def payload(email: Email): NSIUserInfo = NSIUserInfo(
         "Service", "Account", LocalDate.ofEpochDay(0L), "XX999999X",
-        ContactDetails("Health", "Check", None, None, None, "AB12CD", None, email))
+                              ContactDetails("Health", "Check", None, None, None, "AB12CD", None, email))
 
-      private case object Payload1 extends Payload {
+      private[health] case object Payload1 extends Payload {
         override val value = payload("healthcheck_ping@noreply.com")
       }
 
-      private case object Payload2 extends Payload {
+      private[health] case object Payload2 extends Payload {
         override val value = payload("healthcheck_pong@noreply.com")
       }
 

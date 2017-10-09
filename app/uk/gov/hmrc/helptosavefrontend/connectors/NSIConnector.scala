@@ -133,13 +133,13 @@ class NSIConnectorImpl @Inject() (conf: Configuration, metrics: Metrics) extends
   override def test(userInfo: NSIUserInfo)(implicit hc: HeaderCarrier, ex: ExecutionContext): Result[Unit] = EitherT[Future, String, Unit]{
     httpProxy.put(nsiTestUrl, userInfo, Map(nsiAuthHeaderKey → nsiBasicAuth))
       .map[Either[String, Unit]] { response ⇒
-      response.status match {
-        case Status.OK ⇒ Right(())
-        case other     ⇒ Left(s"Received unexpected status $other from NS&I while trying to update email. Body was ${response.body}")
+        response.status match {
+          case Status.OK ⇒ Right(())
+          case other     ⇒ Left(s"Received unexpected status $other from NS&I while trying to update email. Body was ${response.body}")
+        }
+      }.recover {
+        case e ⇒ Left(s"Encountered error while trying to create account: ${e.getMessage}")
       }
-    }.recover {
-      case e ⇒ Left(s"Encountered error while trying to create account: ${e.getMessage}")
-    }
   }
 
   private def handleErrorStatus(status: Int, response: HttpResponse, nino: NINO, time: Long) = {
