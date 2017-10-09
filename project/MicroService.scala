@@ -110,6 +110,7 @@ trait MicroService {
     .settings(wartremoverExcluded ++=
       routes.in(Compile).value ++
       (baseDirectory ** "*.sc").value ++
+      (baseDirectory ** "NSIConnectionHealthTest.scala").value ++
       Seq(sourceManaged.value / "main" / "sbt-buildinfo" / "BuildInfo.scala")
     )
     .settings(
